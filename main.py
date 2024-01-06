@@ -1,9 +1,18 @@
 from collections import UserDict
+from datetime import datetime
 
 
 class Field:
     def __init__(self, value):
-        self.value = value
+        self._value = value
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        self._value = new_value
 
 
 class Name(Field):
@@ -11,6 +20,16 @@ class Name(Field):
         if not value:
             raise ValueError("Name cannot be empty.")
         super().__init__(value)
+
+    @property
+    def name(self):
+        return self._value
+
+    @name.setter
+    def name(self, new_name):
+        if not new_name:
+            raise ValueError("Name cannot be empty.")
+        self._value = new_name
 
 
 class Phone(Field):
@@ -22,14 +41,43 @@ class Phone(Field):
         if not (self.value.isdigit() and len(self.value) == 10):
             raise ValueError("Phone number must contain 10 digits.")
 
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        self._value = new_value
+        self.validate()
+
     def __str__(self):
-        return self.value
+        return self._value
+
+
+class Birthday(Field):
+    def __init__(self, value=None):
+        self._value = value
+        self.validate()
+
+    def validate(self):
+        if self._value and not isinstance(self._value, datetime):
+            raise ValueError("Birthday must be a valid datetime object.")
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        self._value = new_value
+        self.validate()
 
 
 class Record:
-    def __init__(self, name):
+    def __init__(self, name, birthday=None):
         self.name = Name(name)
         self.phones = []
+        self.birthday = Birthday(birthday)
 
     def add_phone(self, phone_value):
         phone = Phone(phone_value)
@@ -55,9 +103,19 @@ class Record:
                 return
         raise ValueError(f"Phone {phone_value} not found.")
 
+    def days_to_birthday(self):
+        if self.birthday.value:
+            today = datetime.today()
+            next_birthday = datetime(today.year, self.birthday.value.month, self.birthday.value.day)
+            if today > next_birthday:
+                next_birthday = datetime(today.year + 1, self.birthday.value.month, self.birthday.value.day)
+            days_remaining = (next_birthday - today).days
+            return days_remaining
+        return None
+
     def __str__(self):
         phones_str = "; ".join([phone.value for phone in self.phones])
-        return f"Contact name: {self.name.value}, phones: {phones_str}"
+        return f"Contact name: {self.name.value}, phones: {phones_str}, birthday: {self.birthday.value}"
 
 
 class AddressBook(UserDict):
@@ -71,36 +129,49 @@ class AddressBook(UserDict):
         if name in self.data:
             del self.data[name]
 
+    def iterator(self, batch_size=5):
+        records_list = list(self.data.values())
+        for i in range(0, len(records_list), batch_size):
+            yield records_list[i:i + batch_size]
+
+    def display_page(self, page_number):
+        try:
+            page_number = int(page_number)
+            if page_number < 1 or page_number > len(self.data):
+                raise ValueError("Invalid page number.")
+        except ValueError as e:
+            print(f"Invalid input: {e}")
+            return
+
+        page_size = 5
+        start_index = (page_number - 1) * page_size
+        end_index = start_index + page_size
+        selected_page = list(self.iterator(batch_size=page_size))[page_number - 1]
+
+        print(f"Page {page_number}:")
+        for record in selected_page:
+            print(record)
+            days_remaining = record.days_to_birthday()
+            if days_remaining is not None:
+                print(f"Days to birthday: {days_remaining}")
+
 
 # Створення нової адресної книги
 book = AddressBook()
 
-# Створення запису для John
-john_record = Record("John")
-john_record.add_phone("1234567890")
-john_record.add_phone("5555555555")
+# Додавання записів у книгу
+for i in range(1, 21):
+    name = f"Contact{i}"
+    birthday = datetime(1990 + i, 1, i)  # Припустимо, що у всіх контактів різні роки народження
+    new_record = Record(name, birthday)
+    new_record.add_phone(f"{1234567890+i}")
+    new_record.add_phone(f"{9876543210+i}")
+    book.add_record(new_record)
 
-# Додавання запису John до адресної книги
-book.add_record(john_record)
-
-# Створення та додавання нового запису для Jane
-jane_record = Record("Jane")
-jane_record.add_phone("9876543210")
-book.add_record(jane_record)
-
-# Виведення всіх записів у книзі
-for name, record in book.data.items():
-    print(record)
-
-# Знаходження та редагування телефону для John
-john = book.find("John")
-john.edit_phone("1234567890", "1112223333")
-
-print(john)  # Виведення: Contact name: John, phones: 1112223333; 5555555555
-
-# Пошук конкретного телефону у записі John
-found_phone = john.find_phone("5555555555")
-print(f"{john.name.value}: {found_phone}")  # Виведення: 5555555555
-
-# Видалення запису Jane
-book.delete("Jane")
+while True:
+    page_number_input = input("Enter the page number to display: ")
+    if page_number_input == "close":
+        print("Bye!")
+        break
+    else:
+        book.display_page(page_number_input)
